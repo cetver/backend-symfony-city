@@ -1,0 +1,23 @@
+#!/usr/bin/env php
+<?php
+require_once __DIR__ . '/../bootstrap.php';
+
+use App\Console;
+
+$app = new Silly\Application;
+$app->useContainer($container, true);
+
+$app->command('file:parser file', Console\FileParserCommand::class)
+    ->descriptions('Парсинг файла выгрузки', [
+        'file'   => 'Имя файла'
+    ]);
+
+if ($_SERVER['APP_ENV'] == 'dev') {
+    $app->command('file:generator file [--lines=]', Console\FileGeneratorCommand::class)
+        ->descriptions('Генерация файла выгрузки', [
+            'file'   => 'Имя файла',
+            '--lines' => 'Сколько строк необходимо сгенерировать?'
+        ]);
+}
+
+$app->run();

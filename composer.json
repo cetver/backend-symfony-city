@@ -1,0 +1,47 @@
+{
+    "name": "15web/hr-backed-symfony-city",
+    "description": "Тестовое задание на должность Backend разработчика",
+    "type": "project",
+    "require": {
+        "php": "^7.4",
+        "ext-json": "*",
+        "ext-pdo": "*",
+        "mnapoli/silly": "^1.7",
+        "symfony/dependency-injection": "^5.0",
+        "symfony/dotenv": "^5.0"
+    },
+    "require-dev": {
+        "roave/security-advisories": "dev-master",
+        "fzaninotto/faker": "^1.9"
+    },
+    "autoload": {
+        "psr-0": {
+            "App\\": "src/"
+        }
+    },
+    "license": "proprietary",
+    "authors": [
+        {
+            "name": "Студия 15",
+            "email": "support@15web.ru",
+            "homepage": "https://www.15web.ru"
+        }
+    ],
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "config": {
+        "optimize-autoloader": true,
+        "platform": {
+            "php": "7.4.1"
+        },
+        "preferred-install": {
+            "*": "dist"
+        },
+        "prestissimo": {
+            "maxConnections": 6,
+            "minConnections": 3
+        },
+        "process-timeout": 2000,
+        "sort-packages": true
+    }
+}
