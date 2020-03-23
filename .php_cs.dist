@@ -1,0 +1,21 @@
+<?php
+
+$finder = PhpCsFixer\Finder::create()
+                           ->in(__DIR__)
+                           ->exclude(
+                               [
+                                   'vendor',
+                                   'var',
+                                   'src/Migration',
+                               ]
+                           );
+
+return PhpCsFixer\Config::create()
+                        ->setRules(
+                            [
+                                '@Symfony' => true,
+                                '@DoctrineAnnotation' => true,
+                            ]
+                        )
+                        ->setFinder($finder)
+                        ->setUsingCache(false);
