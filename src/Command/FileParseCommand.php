@@ -96,6 +96,12 @@ EOF
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
+        if (!$this->lock()) {
+            $this->logger->error('The command is already running in another process');
+
+            return 1;
+        }
+
         $filepath = (string) $input->getOption('filepath');
         try {
             $readLinesService = $this->readLinesServiceFactory->create($filepath);
