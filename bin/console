@@ -1,23 +1,43 @@
 #!/usr/bin/env php
 <?php
-require_once __DIR__ . '/../bootstrap.php';
 
-use App\Console;
+use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Tools\Console\Helper\EntityManagerHelper;
+use Symfony\Component\Console\Application;
+use Symfony\Component\Console\DependencyInjection\AddConsoleCommandPass;
 
-$app = new Silly\Application;
-$app->useContainer($container, true);
-
-$app->command('file:parser file', Console\FileParserCommand::class)
-    ->descriptions('Парсинг файла выгрузки', [
-        'file'   => 'Имя файла'
-    ]);
-
-if ($_SERVER['APP_ENV'] == 'dev') {
-    $app->command('file:generator file [--lines=]', Console\FileGeneratorCommand::class)
-        ->descriptions('Генерация файла выгрузки', [
-            'file'   => 'Имя файла',
-            '--lines' => 'Сколько строк необходимо сгенерировать?'
-        ]);
+if (!in_array(PHP_SAPI, ['cli', 'phpdbg', 'embed'], true)) {
+    $message = sprintf('The console should be invoked via the CLI version of PHP, not the %s SAPI', PHP_SAPI);
+    throw new RuntimeException($message);
 }
 
-$app->run();
+require_once __DIR__.'/../config/bootstrap.php';
+/**
+ * @var \Symfony\Component\DependencyInjection\ContainerInterface $container
+ */
+try {
+    /** @var \Symfony\Component\Console\CommandLoader\ContainerCommandLoader $commandLoader */
+    $commandLoader = $container->get('console.command_loader');
+} catch (Exception $e) {
+    $message = sprintf('The "%s" compiler pass is missed', AddConsoleCommandPass::class);
+    throw new RuntimeException($message);
+}
+
+try {
+    /** @var \Symfony\Contracts\EventDispatcher\EventDispatcherInterface $eventDispatcher */
+    $eventDispatcherService = 'event_dispatcher';
+    $eventDispatcher = $container->get($eventDispatcherService);
+} catch (Exception $e) {
+    throw new RuntimeException(sprintf('The "%s" service declaration is missing', $eventDispatcherService));
+}
+
+$application = new Application();
+$helperSet = $application->getHelperSet();
+$helperSet->set(
+    new EntityManagerHelper($container->get(EntityManagerInterface::class))
+);
+$application->setHelperSet($helperSet);
+$application->setCommandLoader($commandLoader);
+$application->setDispatcher($eventDispatcher);
+
+$application->run();

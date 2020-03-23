@@ -1,0 +1,405 @@
+services:
+    # Defaults
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\:
+        resource: '../../src/*'
+        exclude: '../../src/{Constant,DTO,Entity}'
+
+    # Event dispatcher
+    event_dispatcher:
+        class: Symfony\Component\EventDispatcher\EventDispatcher
+        public: true
+
+    Symfony\Component\EventDispatcher\EventDispatcherInterface:
+        alias: 'event_dispatcher'
+
+    Symfony\Contracts\EventDispatcher\EventDispatcherInterface:
+        alias: 'event_dispatcher'
+
+    App\Command\FileGenerateCommand:
+        arguments:
+            $env: '%env(APP_ENV)%'
+            $serializer: '@serializer.generate_city_dto'
+            $logger: '@monolog.logger.console_command.file_generate'
+        tags:
+            -
+                name: 'console.command'
+
+    App\Command\FileParseCommand:
+        arguments:
+            $logger: '@monolog.logger.console_command.file_parse'
+            $fileStorage: '@storage.file'
+            $serializer: '@serializer.parse_city_dto'
+        tags:
+            -
+                name: 'console.command'
+
+    # Serializers
+    Symfony\Component\Serializer\Encoder\JsonEncoder:
+        class: Symfony\Component\Serializer\Encoder\JsonEncoder
+
+    Symfony\Component\Serializer\Normalizer\ObjectNormalizer:
+        class: Symfony\Component\Serializer\Normalizer\ObjectNormalizer
+
+    App\Normalizer\ParseCityDTONormalizer:
+        class: App\Normalizer\ParseCityDTONormalizer
+
+    serializer.generate_city_dto:
+        class: Symfony\Component\Serializer\Serializer
+        arguments:
+            $normalizers:
+                - '@Symfony\Component\Serializer\Normalizer\ObjectNormalizer'
+            $encoders:
+                - '@Symfony\Component\Serializer\Encoder\JsonEncoder'
+
+    serializer.parse_city_dto:
+        class: Symfony\Component\Serializer\Serializer
+        arguments:
+            $normalizers:
+                - '@App\Normalizer\ParseCityDTONormalizer'
+                - '@Symfony\Component\Serializer\Normalizer\ObjectNormalizer'
+            $encoders:
+                - '@Symfony\Component\Serializer\Encoder\JsonEncoder'
+
+    # Loggers
+    Symfony\Bridge\Monolog\Processor\ConsoleCommandProcessor:
+        class: Symfony\Bridge\Monolog\Processor\ConsoleCommandProcessor
+        arguments:
+            $includeArguments: true
+            $includeOptions: true
+        tags:
+            -
+                name: 'monolog.processor'
+            -
+                name: 'kernel.event_subscriber'
+
+    Monolog\Processor\MemoryPeakUsageProcessor:
+        class: Monolog\Processor\MemoryPeakUsageProcessor
+
+    monolog.logger.console_command.file_generate:
+        class: Symfony\Bridge\Monolog\Logger
+        arguments:
+            $name: 'console_command.file_generate'
+            $handlers:
+                - '@monolog.handler.console'
+                - '@monolog.handler.console_command.file_generate'
+            $processors:
+                - '@Symfony\Bridge\Monolog\Processor\ConsoleCommandProcessor'
+                - '@Monolog\Processor\MemoryPeakUsageProcessor'
+
+    monolog.logger.console_command.file_parse:
+        class: Symfony\Bridge\Monolog\Logger
+        arguments:
+            $name: 'console_command.file_parse'
+            $handlers:
+                - '@monolog.handler.console'
+                - '@monolog.handler.console_command.file_parse'
+            $processors:
+                - '@Symfony\Bridge\Monolog\Processor\ConsoleCommandProcessor'
+                - '@Monolog\Processor\MemoryPeakUsageProcessor'
+
+    # Validator
+    validator.builder:
+        class: Symfony\Component\Validator\ValidatorBuilder
+        factory: ['Symfony\Component\Validator\Validation', 'createValidatorBuilder']
+        calls:
+            -
+                setConstraintValidatorFactory: ['@validator.validator_factory']
+            -
+                setMappingCache: ['@validator.mapping.cache.adapter']
+            -
+                enableAnnotationMapping: []
+
+    validator:
+        class: Symfony\Component\Validator\Validator\ValidatorInterface
+        factory: ['@validator.builder', 'getValidator']
+        public: true
+
+    Symfony\Component\Validator\Validator\ValidatorInterface:
+        alias: 'validator'
+
+    validator.mapping.class_metadata_factory:
+        alias: 'validator'
+
+    validator.validator_factory:
+        class: Symfony\Component\Validator\ContainerConstraintValidatorFactory
+        arguments:
+            - '@service_container'
+
+    validator.expression:
+        class: Symfony\Component\Validator\ContainerConstraintValidatorFactory
+        tags:
+            -
+                name: 'validator.constraint_validator'
+
+    # По хорошему, нужен более быстрый кэш, например:
+    # Symfony\Component\Cache\Adapter\PhpArrayAdapter + bin/console debug:container validator.mapping.cache_warmer
+    # но лень писать warmer :)
+    validator.mapping.cache.adapter:
+        class: Symfony\Component\Cache\Adapter\FilesystemAdapter
+        arguments:
+            $namespace: 'validator.mapping.cache.adapter'
+            $directory: '%dir.cache%'
+
+    # Annotations
+    annotations.reader:
+        class: Doctrine\Common\Annotations\AnnotationReader
+        calls:
+            -
+                addGlobalIgnoredName: ['required', '@annotations.dummy_registry']
+
+    annotations.dummy_registry:
+        class: Doctrine\Common\Annotations\AnnotationRegistry
+        calls:
+            -
+                registerUniqueLoader: ['class_exists']
+
+    annotations.cached_reader:
+        class: Doctrine\Common\Annotations\CachedReader
+        arguments:
+            $reader: '@annotations.reader'
+            $cache:  '@Doctrine\Common\Cache\ArrayCache'
+            $debug: '%env(APP_DEBUG)%'
+
+    annotations.filesystem_cache:
+        class: Doctrine\Common\Cache\FilesystemCache
+
+    annotation_reader:
+        alias: 'annotations.reader'
+
+    Doctrine\Common\Annotations\Reader:
+        alias: 'annotation_reader'
+
+    # Cache
+    Doctrine\Common\Cache\ArrayCache:
+        class: Doctrine\Common\Cache\ArrayCache
+
+    storage.file:
+        class: Symfony\Component\Cache\Adapter\FilesystemAdapter
+        arguments:
+            $namespace: 'cities'
+            $directory: '%dir.db%'
+
+    # Doctrine
+    doctrine.orm.default_event_manager:
+        class: Doctrine\Common\EventManager
+        calls:
+            -
+                addEventSubscriber: ['@App\EntitySubscriber\GenerateIdFromNameEntitySubscriber']
+
+    doctrine.dbal.default_connection:
+        class: Doctrine\DBAL\DriverManager
+        factory: ['Doctrine\DBAL\DriverManager', 'getConnection']
+        arguments:
+            $params:
+                url: '%env(DB_URL)%'
+                defaultTableOptions:
+                    engine: 'InnoDB'
+                    charset: 'utf8'
+                    collate: 'utf8_unicode_ci'
+            $eventManager: '@doctrine.orm.default_event_manager'
+        public: true
+        shared: true
+
+    doctrine.orm.default_query_cache:
+        class: Doctrine\Common\Cache\FilesystemCache
+        arguments:
+            $directory: '%dir.doctrine.cache_query%'
+        shared: true
+
+    doctrine.orm.default_metadata_cache:
+        class: Doctrine\Common\Cache\FilesystemCache
+        arguments:
+            $directory: '%dir.doctrine.cache_metadata%'
+        shared: true
+
+    doctrine.orm.default_configuration:
+        class: Doctrine\ORM\Configuration
+        factory: ['Doctrine\ORM\Tools\Setup', 'createAnnotationMetadataConfiguration']
+        arguments:
+            $paths: '%dir.doctrine.entity_paths%'
+            $isDevMode: '%env(APP_DEBUG)%'
+            $proxyDir: '%dir.doctrine.cache_proxy%'
+            $cache: '@doctrine.orm.default_query_cache'
+            $useSimpleAnnotationReader: false
+        calls:
+            -
+                setMetadataCacheImpl: ['@doctrine.orm.default_metadata_cache']
+        shared: true
+
+    doctrine.orm.default_entity_manager:
+        class: Doctrine\ORM\EntityManager
+        factory: ['Doctrine\ORM\EntityManager', 'create']
+        arguments:
+            $connection: '@doctrine.dbal.default_connection'
+            $config: '@doctrine.orm.default_configuration'
+            $eventManager: '@doctrine.orm.default_event_manager'
+        public: true
+        lazy: true
+        shared: true
+
+    Doctrine\ORM\EntityManagerInterface:
+        alias: 'doctrine.orm.default_entity_manager'
+        public: true
+
+    # Doctrine migrations
+    Doctrine\Migrations\Configuration\Configuration:
+        class: Doctrine\Migrations\Configuration\Configuration
+        arguments:
+            $connection: '@doctrine.dbal.default_connection'
+        calls:
+            -
+                setName: ['Application Migrations']
+            -
+                setMigrationsTableName: ['migration_versions']
+            -
+                setMigrationsColumnName: ['version']
+            -
+                setMigrationsColumnLength: [14]
+            -
+                setMigrationsExecutedAtColumnName: ['executed_at']
+            -
+                setMigrationsDirectory: ['%dir.doctrine_migration%']
+            -
+                setMigrationsNamespace: ['App\Migration']
+            -
+                setMigrationsAreOrganizedByYearAndMonth: [true]
+
+    Doctrine\Migrations\Tools\Console\Command\DiffCommand:
+        class: Doctrine\Migrations\Tools\Console\Command\DiffCommand
+        calls:
+            -
+                setConnection: ['@doctrine.dbal.default_connection']
+            -
+                setMigrationConfiguration: ['@Doctrine\Migrations\Configuration\Configuration']
+        tags:
+            -
+                name: 'console.command'
+
+    Doctrine\Migrations\Tools\Console\Command\DumpSchemaCommand:
+        class: Doctrine\Migrations\Tools\Console\Command\DumpSchemaCommand
+        calls:
+            -
+                setConnection: ['@doctrine.dbal.default_connection']
+            -
+                setMigrationConfiguration: ['@Doctrine\Migrations\Configuration\Configuration']
+        tags:
+            -
+                name: 'console.command'
+
+    Doctrine\Migrations\Tools\Console\Command\ExecuteCommand:
+        class: Doctrine\Migrations\Tools\Console\Command\ExecuteCommand
+        calls:
+            -
+                setConnection: ['@doctrine.dbal.default_connection']
+            -
+                setMigrationConfiguration: ['@Doctrine\Migrations\Configuration\Configuration']
+        tags:
+            -
+                name: 'console.command'
+
+    Doctrine\Migrations\Tools\Console\Command\GenerateCommand:
+        class: Doctrine\Migrations\Tools\Console\Command\GenerateCommand
+        calls:
+            -
+                setConnection: ['@doctrine.dbal.default_connection']
+            -
+                setMigrationConfiguration: ['@Doctrine\Migrations\Configuration\Configuration']
+        tags:
+            -
+                name: 'console.command'
+
+    Doctrine\Migrations\Tools\Console\Command\LatestCommand:
+        class: Doctrine\Migrations\Tools\Console\Command\LatestCommand
+        calls:
+            -
+                setConnection: ['@doctrine.dbal.default_connection']
+            -
+                setMigrationConfiguration: ['@Doctrine\Migrations\Configuration\Configuration']
+        tags:
+            -
+                name: 'console.command'
+
+    Doctrine\Migrations\Tools\Console\Command\MigrateCommand:
+        class: Doctrine\Migrations\Tools\Console\Command\MigrateCommand
+        calls:
+            -
+                setConnection: ['@doctrine.dbal.default_connection']
+            -
+                setMigrationConfiguration: ['@Doctrine\Migrations\Configuration\Configuration']
+        tags:
+            -
+                name: 'console.command'
+
+    Doctrine\Migrations\Tools\Console\Command\RollupCommand:
+        class: Doctrine\Migrations\Tools\Console\Command\RollupCommand
+        calls:
+            -
+                setConnection: ['@doctrine.dbal.default_connection']
+            -
+                setMigrationConfiguration: ['@Doctrine\Migrations\Configuration\Configuration']
+        tags:
+            -
+                name: 'console.command'
+
+    Doctrine\Migrations\Tools\Console\Command\StatusCommand:
+        class: Doctrine\Migrations\Tools\Console\Command\StatusCommand
+        calls:
+            -
+                setConnection: ['@doctrine.dbal.default_connection']
+            -
+                setMigrationConfiguration: ['@Doctrine\Migrations\Configuration\Configuration']
+        tags:
+            -
+                name: 'console.command'
+
+    Doctrine\Migrations\Tools\Console\Command\UpToDateCommand:
+        class: Doctrine\Migrations\Tools\Console\Command\UpToDateCommand
+        calls:
+            -
+                setConnection: ['@doctrine.dbal.default_connection']
+            -
+                setMigrationConfiguration: ['@Doctrine\Migrations\Configuration\Configuration']
+        tags:
+            -
+                name: 'console.command'
+
+    Doctrine\Migrations\Tools\Console\Command\VersionCommand:
+        class: Doctrine\Migrations\Tools\Console\Command\VersionCommand
+        calls:
+            -
+                setConnection: ['@doctrine.dbal.default_connection']
+            -
+                setMigrationConfiguration: ['@Doctrine\Migrations\Configuration\Configuration']
+        tags:
+            -
+                name: 'console.command'
+
+    # Services
+    faker.ru_ru:
+        class: Faker\Generator
+        factory: ['Faker\Factory', 'create']
+        arguments:
+            $locale: 'ru_RU'
+
+    App\Service\CityGeneratorService:
+        class: App\Service\CityGeneratorService
+        arguments:
+            $faker: '@faker.ru_ru'
+
+    Symfony\Component\Filesystem\Filesystem:
+        class: Symfony\Component\Filesystem\Filesystem
+
+    App\Service\CityReaderService:
+        class: App\Service\CityReaderService
+        arguments:
+            $serializer: '@serializer.parse_city_dto'
+
+    App\Transformer\ShortMd5Transformer:
+        class: App\Transformer\ShortMd5Transformer
+
+    App\Transformer\StringTransformerInterface:
+        alias: 'App\Transformer\ShortMd5Transformer'

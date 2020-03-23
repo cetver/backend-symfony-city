@@ -1,0 +1,16 @@
+monolog:
+    handlers:
+        console:
+            type: console
+
+        console_command.file_generate:
+            type: stream
+            path: "%dir.log.console_command%/file-generate"
+            level: error
+            formatter: monolog.formatter.json
+
+        console_command.file_parse:
+            type: stream
+            path: "%dir.log.console_command%/file-parse"
+            level: error
+            formatter: monolog.formatter.json
